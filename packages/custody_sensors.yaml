@@ -1,1 +1,194 @@
-packages/README.md
+###############################################################################
+# Custody Tracker – Sensors Package (Dad/Mom/Other)
+# Matches the generic blueprint + dashboard package entity naming convention.
+###############################################################################
+
+input_datetime:
+  custody_cycle_anchor_dad_week_start:
+    name: Custody cycle anchor (Dad week start)
+    has_date: true
+    has_time: false
+    icon: mdi:calendar-start
+
+template:
+  - sensor:
+      # -----------------------------------------------------------------------
+      # Final Night (with date attribute used by dashboard)
+      # -----------------------------------------------------------------------
+      - name: "Custody Final Night (with date)"
+        unique_id: custody_final_night_with_date
+        state: "{{ states('input_select.custody_night_location_final') }}"
+        attributes:
+          for_date: "{{ states('input_text.custody_last_final_display_date') }}"
+
+      # -----------------------------------------------------------------------
+      # Totals (YTD + MTD)
+      # -----------------------------------------------------------------------
+      - name: "Custody YTD Total Nights"
+        unique_id: custody_ytd_total_nights
+        unit_of_measurement: "nights"
+        state: >
+          {% set dad = states('counter.custody_nights_dad')|int(0) %}
+          {% set mom = states('counter.custody_nights_mom')|int(0) %}
+          {% set other = states('counter.custody_nights_other')|int(0) %}
+          {{ dad + mom + other }}
+
+      - name: "Custody MTD Total Nights"
+        unique_id: custody_mtd_total_nights
+        unit_of_measurement: "nights"
+        state: >
+          {% set dad = states('counter.custody_nights_dad_mtd')|int(0) %}
+          {% set mom = states('counter.custody_nights_mom_mtd')|int(0) %}
+          {% set other = states('counter.custody_nights_other_mtd')|int(0) %}
+          {{ dad + mom + other }}
+
+      # -----------------------------------------------------------------------
+      # Percentages (Dad/Mom/Other) – YTD
+      # -----------------------------------------------------------------------
+      - name: "Custody Dad % (YTD)"
+        unique_id: custody_dad_pct_ytd
+        unit_of_measurement: "%"
+        state: >
+          {% set dad = states('counter.custody_nights_dad')|int(0) %}
+          {% set total = states('sensor.custody_ytd_total_nights')|int(0) %}
+          {{ ((dad / total) * 100) | round(1) if total > 0 else 0 }}
+
+      - name: "Custody Mom % (YTD)"
+        unique_id: custody_mom_pct_ytd
+        unit_of_measurement: "%"
+        state: >
+          {% set mom = states('counter.custody_nights_mom')|int(0) %}
+          {% set total = states('sensor.custody_ytd_total_nights')|int(0) %}
+          {{ ((mom / total) * 100) | round(1) if total > 0 else 0 }}
+
+      - name: "Custody Other % (YTD)"
+        unique_id: custody_other_pct_ytd
+        unit_of_measurement: "%"
+        state: >
+          {% set other = states('counter.custody_nights_other')|int(0) %}
+          {% set total = states('sensor.custody_ytd_total_nights')|int(0) %}
+          {{ ((other / total) * 100) | round(1) if total > 0 else 0 }}
+
+      # -----------------------------------------------------------------------
+      # Percentages (Dad/Mom/Other) – MTD
+      # -----------------------------------------------------------------------
+      - name: "Custody Dad % (MTD)"
+        unique_id: custody_dad_pct_mtd
+        unit_of_measurement: "%"
+        state: >
+          {% set dad = states('counter.custody_nights_dad_mtd')|int(0) %}
+          {% set total = states('sensor.custody_mtd_total_nights')|int(0) %}
+          {{ ((dad / total) * 100) | round(1) if total > 0 else 0 }}
+
+      - name: "Custody Mom % (MTD)"
+        unique_id: custody_mom_pct_mtd
+        unit_of_measurement: "%"
+        state: >
+          {% set mom = states('counter.custody_nights_mom_mtd')|int(0) %}
+          {% set total = states('sensor.custody_mtd_total_nights')|int(0) %}
+          {{ ((mom / total) * 100) | round(1) if total > 0 else 0 }}
+
+      - name: "Custody Other % (MTD)"
+        unique_id: custody_other_pct_mtd
+        unit_of_measurement: "%"
+        state: >
+          {% set other = states('counter.custody_nights_other_mtd')|int(0) %}
+          {% set total = states('sensor.custody_mtd_total_nights')|int(0) %}
+          {{ ((other / total) * 100) | round(1) if total > 0 else 0 }}
+
+      # -----------------------------------------------------------------------
+      # Expected Dad Nights (14-day cycle; Dad has first 7 nights)
+      # Anchor = date of a Dad week start in your schedule
+      # -----------------------------------------------------------------------
+      - name: "Custody Expected Dad Nights (YTD)"
+        unique_id: custody_expected_dad_nights_ytd
+        unit_of_measurement: "nights"
+        state: >
+          {% set anchor_raw = states('input_datetime.custody_cycle_anchor_dad_week_start') %}
+          {% if anchor_raw in ['unknown','unavailable','', None] %}
+            0
+          {% else %}
+            {% set anchor = as_local(as_datetime(anchor_raw)).replace(hour=0, minute=0, second=0, microsecond=0) %}
+            {% set start  = now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0) %}
+            {% set end    = now().replace(hour=0, minute=0, second=0, microsecond=0) %}
+            {% set days = (end.date() - start.date()).days %}
+            {% set ns = namespace(count=0) %}
+            {% for i in range(days) %}
+              {% set d = start + timedelta(days=i) %}
+              {% set offset = (d.date() - anchor.date()).days %}
+              {% set mod = (offset % 14) %}
+              {% if mod < 7 %}
+                {% set ns.count = ns.count + 1 %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.count }}
+          {% endif %}
+
+      - name: "Custody Expected Dad Nights (MTD)"
+        unique_id: custody_expected_dad_nights_mtd
+        unit_of_measurement: "nights"
+        state: >
+          {% set anchor_raw = states('input_datetime.custody_cycle_anchor_dad_week_start') %}
+          {% if anchor_raw in ['unknown','unavailable','', None] %}
+            0
+          {% else %}
+            {% set anchor = as_local(as_datetime(anchor_raw)).replace(hour=0, minute=0, second=0, microsecond=0) %}
+            {% set start  = now().replace(day=1, hour=0, minute=0, second=0, microsecond=0) %}
+            {% set end    = now().replace(hour=0, minute=0, second=0, microsecond=0) %}
+            {% set days = (end.date() - start.date()).days %}
+            {% set ns = namespace(count=0) %}
+            {% for i in range(days) %}
+              {% set d = start + timedelta(days=i) %}
+              {% set offset = (d.date() - anchor.date()).days %}
+              {% set mod = (offset % 14) %}
+              {% if mod < 7 %}
+                {% set ns.count = ns.count + 1 %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.count }}
+          {% endif %}
+
+      # -----------------------------------------------------------------------
+      # Variance = Actual Dad nights - Expected Dad nights
+      # -----------------------------------------------------------------------
+      - name: "Custody Dad Variance (YTD)"
+        unique_id: custody_dad_variance_ytd
+        unit_of_measurement: "nights"
+        state: >
+          {{ states('counter.custody_nights_dad')|int(0)
+             - states('sensor.custody_expected_dad_nights_ytd')|int(0) }}
+
+      - name: "Custody Dad Variance (MTD)"
+        unique_id: custody_dad_variance_mtd
+        unit_of_measurement: "nights"
+        state: >
+          {{ states('counter.custody_nights_dad_mtd')|int(0)
+             - states('sensor.custody_expected_dad_nights_mtd')|int(0) }}
+
+      # -----------------------------------------------------------------------
+      # 14-night history icons (reads input_text.custody_history_14)
+      # Format stored: YYYY-MM-DD:D|YYYY-MM-DD:M|YYYY-MM-DD:O
+      # -----------------------------------------------------------------------
+      - name: "Custody History (14 nights) Icons"
+        unique_id: custody_history_14_icons
+        state: >-
+          {% set raw = states('input_text.custody_history_14') %}
+          {% set parts = [] if raw in ['unknown','unavailable','', None] else raw.split('|') %}
+          {% set ns = namespace(items=[]) %}
+          {% for p in parts %}
+            {% set code = (p.split(':')[1] if ':' in p else 'U') | trim | upper %}
+            {% if code == 'D' %}
+              {% set ns.items = ns.items + ['🟦'] %}
+            {% elif code == 'M' %}
+              {% set ns.items = ns.items + ['🟥'] %}
+            {% elif code == 'O' %}
+              {% set ns.items = ns.items + ['🟨'] %}
+            {% else %}
+              {% set ns.items = ns.items + ['⬜'] %}
+            {% endif %}
+          {% endfor %}
+          {% set padded = ( (['⬜'] * 14) + ns.items )[-14:] %}
+          {{ padded | join(' ') }}
+        attributes:
+          raw: "{{ states('input_text.custody_history_14') }}"
+          legend: "🟦 Dad, 🟥 Mom, 🟨 Other, ⬜ Unknown"
