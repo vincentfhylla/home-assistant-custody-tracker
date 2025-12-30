@@ -2,9 +2,9 @@ blueprint:
   name: Custody – Night Finalize + History (Dad/Mom/Other)
   description: >
     Finalizes at a set time. Restart-safe.
-    Auto -> Final only when AUTO is Dad or Mom.
+    Auto -> Final only when AUTO is Dad or Mom (and manual override OFF).
     Allows Other ONLY when manual override is ON and a typed reason is provided.
-    Increments counters and writes a 14-night history string.
+    Increments counters and writes a 14-night history string (keep last 14, rewrite-safe).
   domain: automation
 
   input:
@@ -102,18 +102,12 @@ blueprint:
           domain: counter
 
     counters_other:
-      name: Other Counters (optional)
+      name: Other Counters (YTD + MTD)
       default: []
       selector:
         entity:
           multiple: true
           domain: counter
-
-    log_service:
-      name: Optional logging service (ex: rest_command.custody_log)
-      default: ""
-      selector:
-        text: {}
 
 trigger:
   - platform: time
@@ -131,7 +125,17 @@ condition:
     before: !input cutoff_time
 
 action:
-  # Auto -> Final (only when Dad or Mom and not manual)
+  # ---- Action-level variables (safe + blueprint-friendly) ----
+  - variables:
+      auto_ent: !input auto_location
+      final_ent: !input final_location
+      manual_ent: !input manual_override
+      reason_ent: !input other_reason
+      backfill_ent: !input backfill_mode
+      display_date_ent: !input last_display_date
+      history_ent: !input history_14
+
+  # ---- Auto -> Final (only when Dad/Mom and not manual override) ----
   - choose:
       - conditions:
           - condition: state
@@ -139,66 +143,65 @@ action:
             state: "off"
           - condition: template
             value_template: >
-              {{ states(auto) in ['Dad','Mom'] }}
+              {{ states(auto_ent) in ['Dad','Mom'] }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input final_location
             data:
-              option: "{{ states(auto) }}"
-    variables:
-      auto: !input auto_location
+              option: "{{ states(auto_ent) }}"
 
-  # Gate: allow Dad/Mom; allow Other only with manual+typed reason
+  # ---- Gate: allow Dad/Mom; allow Other only with manual + typed reason ----
   - condition: template
     value_template: >
       {{
-        states(final) in ['Dad','Mom']
+        states(final_ent) in ['Dad','Mom']
         or (
-          is_state(manual,'on')
-          and states(final) == 'Other'
-          and (states(reason)|trim|length > 0)
+          is_state(manual_ent,'on')
+          and states(final_ent) == 'Other'
+          and (states(reason_ent) | trim | length > 0)
         )
       }}
-    variables:
-      final: !input final_location
-      manual: !input manual_override
-      reason: !input other_reason
 
+  # ---- Lock + Count ----
   - service: input_boolean.turn_on
     target:
       entity_id:
         - !input night_locked
         - !input night_counted
 
-  # Increment counters
+  # ---- Increment counters ----
   - choose:
-      - conditions: "{{ states(final) == 'Dad' }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ states(final_ent) == 'Dad' }}"
         sequence:
           - service: counter.increment
             target:
               entity_id: !input counters_dad
 
-      - conditions: "{{ states(final) == 'Mom' }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ states(final_ent) == 'Mom' }}"
         sequence:
           - service: counter.increment
             target:
               entity_id: !input counters_mom
 
-      - conditions: "{{ states(final) == 'Other' }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ states(final_ent) == 'Other' }}"
         sequence:
           - service: counter.increment
             target:
               entity_id: !input counters_other
 
-  # Metadata
+  # ---- Metadata ----
   - service: input_text.set_value
     target:
       entity_id: !input last_counted_location
     data:
       value: "{{ states(final_ent) }}"
-    variables:
-      final_ent: !input final_location
 
   - service: input_text.set_value
     target:
@@ -206,11 +209,11 @@ action:
     data:
       value: "{{ now().date().isoformat() }}"
 
-  # Display date = previous night unless backfill ON
+  # ---- Display date = previous night unless backfill ON ----
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ backfill != '' and is_state(backfill,'on') }}"
+            value_template: "{{ backfill_ent != '' and is_state(backfill_ent,'on') }}"
         sequence: []
     default:
       - service: input_text.set_value
@@ -218,10 +221,8 @@ action:
           entity_id: !input last_display_date
         data:
           value: "{{ (now() - timedelta(days=1)).date().isoformat() }}"
-    variables:
-      backfill: !input backfill_mode
 
-  # 14-night history (pipe-delimited), rewrite-safe
+  # ---- 14-night history (pipe-delimited), rewrite-safe ----
   - variables:
       d: >-
         {% set dd = states(display_date_ent) %}
@@ -255,10 +256,6 @@ action:
         {% endfor %}
         {{ out }}
       new_value: "{{ ((filtered + [d ~ ':' ~ code])[-14:]) | join('|') }}"
-    variables:
-      display_date_ent: !input last_display_date
-      final_ent: !input final_location
-      history_ent: !input history_14
 
   - service: input_text.set_value
     target:
@@ -266,12 +263,5 @@ action:
     data:
       value: "{{ new_value }}"
 
-  # Optional logging hook
-  - choose:
-      - conditions: "{{ log != '' }}"
-        sequence:
-          - service: "{{ log }}"
-    variables:
-      log: !input log_service
-
 mode: single
+
