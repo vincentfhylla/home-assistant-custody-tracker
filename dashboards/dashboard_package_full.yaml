@@ -1,0 +1,102 @@
+type: vertical-stack
+cards:
+
+  # -------------------------------
+  # LAST NIGHT RESULT
+  # -------------------------------
+  - type: entities
+    title: 🛏️ Last Night Result
+    show_header_toggle: false
+    entities:
+      - entity: sensor.jack_final_night_with_date
+        name: Final location (night of)
+      - entity: input_text.jack_last_final_display_date
+        name: Date (night of)
+
+  # -------------------------------
+  # MANUAL NIGHT CORRECTION
+  # -------------------------------
+  - type: entities
+    title: ✏️ Manual Night Correction
+    show_header_toggle: false
+    entities:
+      - entity: input_boolean.jack_night_manual_override
+        name: Manual override
+      - entity: input_select.jack_night_location_final
+        name: Final night location
+      - entity: input_text.jack_other_location
+        name: Other reason (if needed)
+
+  # -------------------------------
+  # TOTAL NIGHTS COMPARISON
+  # -------------------------------
+  - type: grid
+    title: 📊 Total Nights Comparison
+    columns: 2
+    square: false
+    cards:
+      - type: entities
+        title: Year-to-Date
+        entities:
+          - counter.jack_nights_at_dad
+          - counter.jack_nights_at_mom
+          - counter.jack_nights_at_other
+          - sensor.jack_custody_ytd_total_nights
+
+      - type: entities
+        title: Month-to-Date
+        entities:
+          - counter.jack_nights_at_dad_mtd
+          - counter.jack_nights_at_mom_mtd
+          - counter.jack_nights_at_other_mtd
+          - sensor.jack_custody_mtd_total_nights
+
+  # -------------------------------
+  # SCHEDULED VS ACTUAL (MTD)
+  # -------------------------------
+  - type: entities
+    title: 📈 Scheduled vs Actual (MTD)
+    entities:
+      - sensor.jack_expected_dad_nights_mtd
+      - counter.jack_nights_at_dad_mtd
+      - sensor.jack_dad_variance_mtd
+
+  # -------------------------------
+  # SCHEDULED VS ACTUAL (YTD)
+  # -------------------------------
+  - type: entities
+    title: 📈 Scheduled vs Actual (YTD)
+    entities:
+      - sensor.jack_expected_dad_nights_ytd
+      - counter.jack_nights_at_dad
+      - sensor.jack_dad_variance_ytd
+
+  # -------------------------------
+  # CUSTODY PERCENTAGES
+  # -------------------------------
+  - type: grid
+    title: ⚖️ Custody Percentages
+    columns: 2
+    square: false
+    cards:
+      - type: gauge
+        name: Dad (MTD)
+        entity: sensor.jack_dad_custody_pct_mtd
+        min: 0
+        max: 100
+        needle: true
+
+      - type: gauge
+        name: Dad (YTD)
+        entity: sensor.jack_dad_custody_pct_ytd
+        min: 0
+        max: 100
+        needle: true
+
+  # -------------------------------
+  # 14 NIGHT HISTORY
+  # -------------------------------
+  - type: markdown
+    title: 🧱 Last 14 Nights
+    content: |
+      {{ states('sensor.jack_custody_history_14_nights_v2') }}
