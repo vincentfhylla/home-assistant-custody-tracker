@@ -1,0 +1,56 @@
+blueprint:
+  name: Custody – Daily Reset (Dad/Mom/Other)
+  description: >
+    Resets nightly flags so auto-detect/finalize can run again.
+  domain: automation
+
+  input:
+    reset_time:
+      name: Reset Time
+      default: "06:10:00"
+      selector:
+        time: {}
+
+    night_locked:
+      name: Night Locked Boolean
+      selector:
+        entity:
+          domain: input_boolean
+
+    night_counted:
+      name: Night Counted Boolean
+      selector:
+        entity:
+          domain: input_boolean
+
+    manual_override:
+      name: Manual Override Boolean
+      selector:
+        entity:
+          domain: input_boolean
+
+    auto_location:
+      name: Auto Night Location
+      selector:
+        entity:
+          domain: input_select
+
+trigger:
+  - platform: time
+    at: !input reset_time
+
+action:
+  - service: input_boolean.turn_off
+    target:
+      entity_id:
+        - !input night_locked
+        - !input night_counted
+        - !input manual_override
+
+  - service: input_select.select_option
+    target:
+      entity_id: !input auto_location
+    data:
+      option: "Unknown"
+
+mode: single
