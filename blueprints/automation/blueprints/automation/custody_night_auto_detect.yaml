@@ -1,0 +1,119 @@
+blueprint:
+  name: Custody – Night Auto Detect (Dad/Mom only, zone-based)
+  description: >
+    Between 00:00 and 03:00, watches the Person entity.
+    If the person stays in Dad or Mom zone for 1 hour, sets AUTO location.
+    Leaves AUTO as-is if not in Dad/Mom zone (prevents "Other" contamination).
+  domain: automation
+
+  input:
+    person:
+      name: Person
+      selector:
+        entity:
+          domain: person
+
+    zone_dad:
+      name: Dad Zone
+      selector:
+        entity:
+          domain: zone
+
+    zone_mom:
+      name: Mom Zone
+      selector:
+        entity:
+          domain: zone
+
+    auto_location:
+      name: Auto Night Location (input_select)
+      selector:
+        entity:
+          domain: input_select
+
+    night_locked:
+      name: Night Locked Boolean
+      selector:
+        entity:
+          domain: input_boolean
+
+    window_start:
+      name: Detect Window Start
+      default: "00:00:00"
+      selector:
+        time: {}
+
+    window_end:
+      name: Detect Window End
+      default: "03:00:01"
+      selector:
+        time: {}
+
+    stable_for:
+      name: Must stay in zone for
+      default: "01:00:00"
+      selector:
+        duration: {}
+
+trigger:
+  - platform: state
+    entity_id: !input person
+
+condition:
+  - condition: time
+    after: !input window_start
+    before: !input window_end
+
+  - condition: state
+    entity_id: !input night_locked
+    state: "off"
+
+  - condition: template
+    value_template: >
+      {{ trigger.to_state is not none and trigger.to_state.state not in ['unknown','unavailable','not_home'] }}
+
+  - condition: or
+    conditions:
+      - condition: zone
+        entity_id: !input person
+        zone: !input zone_dad
+      - condition: zone
+        entity_id: !input person
+        zone: !input zone_mom
+
+action:
+  - variables:
+      person_entity: !input person
+      start_state: "{{ states(person_entity) }}"
+
+  - wait_template: "{{ states(person_entity) != start_state }}"
+    timeout: !input stable_for
+    continue_on_timeout: true
+
+  - condition: template
+    value_template: "{{ wait.completed == false }}"
+
+  - choose:
+      - conditions:
+          - condition: zone
+            entity_id: !input person
+            zone: !input zone_dad
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input auto_location
+            data:
+              option: "Dad"
+
+      - conditions:
+          - condition: zone
+            entity_id: !input person
+            zone: !input zone_mom
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input auto_location
+            data:
+              option: "Mom"
+
+mode: restart
